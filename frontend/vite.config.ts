@@ -4,7 +4,9 @@ import path from 'path'
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [
+    vue()
+  ],
   define: {
     __DEV__: 'import.meta.env.DEV'
   },

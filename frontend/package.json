@@ -4,8 +4,12 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vue-tsc -b && vite build",
+    "preinstall": "cd wasm-surfacenets && cargo fetch",
+    "dev:vite": "vite",
+    "dev:wasm": "cd wasm-surfacenets && wasm-pack build --target web --out-dir ../src/wasm-surfacenets",
+    "dev": "yarn dev:wasm && yarn dev:vite",
+    "build:wasm": "cd wasm-surfacenets && wasm-pack build --target web --release --out-dir ../src/wasm-surfacenets",
+    "build": "yarn build:wasm && vue-tsc -b && vite build",
     "preview": "vite preview"
   },
   "dependencies": {

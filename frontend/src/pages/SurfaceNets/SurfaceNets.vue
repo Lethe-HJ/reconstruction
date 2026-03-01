@@ -111,7 +111,7 @@ async function loadVoxelGrid (name: string, levelValue?: number) {
       }
     }
 
-    workerRef.value.postMessage(
+        workerRef.value.postMessage(
       {
         type: 'load',
         taskId: newTaskId ?? taskId.value ?? '',
@@ -120,7 +120,8 @@ async function loadVoxelGrid (name: string, levelValue?: number) {
         dataBuffer: mergedData.buffer,
         level: levelValue,
         min: finalMin,
-        max: finalMax
+        max: finalMax,
+        computeEnv: computeEnv.value
       },
       [mergedData.buffer]
     )
@@ -161,10 +162,12 @@ onUnmounted(() => {
 })
 
 watch(
-  [filename, chunkSize],
+  [filename, chunkSize, computeEnv],
   () => {
     if (rendererRef.value && !dataRange.value) {
       loadVoxelGrid(filename.value)
+    } else if (rendererRef.value && dataRange.value) {
+      loadVoxelGrid(filename.value, level.value ?? undefined)
     }
   },
   { immediate: true }
@@ -230,7 +233,7 @@ watch(
           <a-select
             v-model:value="computeEnv"
             style="width: 100%"
-            :options="[{ label: 'js', value: 'js' }]"
+            :options="[{ label: 'js', value: 'js' }, { label: 'rust', value: 'rust' }]"
           />
         </a-col>
         <a-col :span="6">
