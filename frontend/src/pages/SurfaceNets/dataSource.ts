@@ -80,21 +80,35 @@ export class DataSource {
   async loadDataFromBackend (
     filename: string,
     chunkSize: number,
-    preprocessResponse: PreprocessResponse
+    preprocessResponse: PreprocessResponse,
+    useCache: boolean = true
   ): Promise<ChunkResult[]> {
     const taskId = preprocessResponse.task_id
     const chunks = preprocessResponse.chunks
-    const chunkLoaders: Worker[] = []
-    const chunkPromises: Promise<ChunkResult>[] = []
-    const activeWorkerCount = Math.min(THREAD_COUNT, chunks.length)
     const tracker = getTracker()
 
+    // 先尝试从 IndexedDB 一次性取齐所有 chunk，若全部命中则直接返回，不发任何 chunk 请求
     const cacheResults = await Promise.all(
       chunks.map(async (chunk) => ({
         chunk,
-        cached: await indexedDBManager.getChunk(filename, chunkSize, chunk.index)
+        cached: useCache ? await indexedDBManager.getChunk(filename, chunkSize, chunk.index) : null
       }))
     )
+    const allFromCache = cacheResults.every((item) => item?.cached != null)
+    if (allFromCache) {
+      return cacheResults.map((item) => ({
+        chunkIndex: item!.chunk.index,
+        buffer: item!.cached!.buffer,
+        min: item!.cached!.min,
+        max: item!.cached!.max,
+        fromCache: true
+      }))
+    }
+
+    const chunkLoaders: Worker[] = []
+    const chunkPromises: Promise<ChunkResult>[] = []
+    const activeWorkerCount = Math.min(THREAD_COUNT, chunks.length)
+    let workerCounter = 0
 
     for (let i = 0; i < cacheResults.length; i++) {
       const item = cacheResults[i]
@@ -112,7 +126,10 @@ export class DataSource {
         )
         continue
       }
-      const workerIndex = i % activeWorkerCount
+      
+      const workerIndex = workerCounter % activeWorkerCount
+      workerCounter++
+      
       if (chunkLoaders.length <= workerIndex) {
         chunkLoaders.push(new ChunkLoaderWorker())
       }
@@ -169,7 +186,7 @@ export class DataSource {
     return results
   }
 
-  async loadData (filename: string, chunkSize: number): Promise<DataLoadResult> {
+  async loadData (filename: string, chunkSize: number, useCache: boolean = true): Promise<DataLoadResult> {
     let preprocessResponse: PreprocessResponse | null = null
     let chunks: Array<{ index: number; start: number; end: number }>
     let shape: [number, number, number]
@@ -177,7 +194,9 @@ export class DataSource {
     let taskId: string | null = null
     const tracker = getTracker()
 
-    const cachedShape = this.getShapeFromCache(filename, chunkSize)
+    // 优先 localStorage，若无则从 IndexedDB 读 shape 元数据（chunk 已在 IndexedDB 时可不发 preprocess）
+    const localShape = useCache ? this.getShapeFromCache(filename, chunkSize) : null
+    const cachedShape = useCache ? (localShape ?? (await indexedDBManager.getShapeMeta(filename, chunkSize))) : null
     let allCached = false
     if (cachedShape) {
       chunks = cachedShape.chunks
@@ -188,7 +207,7 @@ export class DataSource {
 
     let chunkResults: ChunkResult[]
 
-    if (allCached) {
+    if (allCached && useCache) {
       chunkResults = await this.loadChunksFromCache(filename, chunkSize, chunks!)
     } else {
       const preprocessRes = await fetch('/api/voxel-grid/preprocess', {
@@ -214,7 +233,8 @@ export class DataSource {
       shape = preprocessResponse.shape
       dataLength = preprocessResponse.data_length
       this.saveShapeToCache(filename, chunkSize, shape, chunks, dataLength)
-      chunkResults = await this.loadDataFromBackend(filename, chunkSize, preprocessResponse)
+      indexedDBManager.saveShapeMeta(filename, chunkSize, shape, chunks, dataLength).catch(() => {})
+      chunkResults = await this.loadDataFromBackend(filename, chunkSize, preprocessResponse, useCache)
     }
 
     chunkResults.sort((a, b) => a.chunkIndex - b.chunkIndex)

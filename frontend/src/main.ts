@@ -78,9 +78,9 @@ async function clearAllIndexedDB () {
   }
 }
 
-if (import.meta.env.DEV) {
-  await clearAllIndexedDB()
-}
+// if (localStorage.getItem('useCachedData') === 'false') {
+//   await clearAllIndexedDB()
+// }
 
 const app = createApp(App)
 app.use(Antd)

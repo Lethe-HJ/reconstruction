@@ -30,7 +30,12 @@ const error = ref<string | null>(null)
 const filename = ref('CHGDIFF.vasp')
 const chunkSize = ref(5e4)
 const computeEnv = ref('js')
+const useCachedData = ref(localStorage.getItem('useCachedData') !== 'false')
 const level = ref<number | null>(null)
+
+watch(useCachedData, (val) => {
+  localStorage.setItem('useCachedData', String(val))
+})
 const dataRange = ref<{ min: number; max: number } | null>(null)
 const taskId = ref<string | null>(null)
 const currentSessionId = ref<string | null>(null)
@@ -60,7 +65,7 @@ async function loadVoxelGrid (name: string, levelValue?: number) {
   await performanceDB.init()
 
   try {
-    const loadResult = await dataSource.loadData(name, chunkSize.value)
+    const loadResult = await dataSource.loadData(name, chunkSize.value, useCachedData.value)
     const { chunks: chunkResults, shape, taskId: newTaskId } = loadResult
     if (newTaskId) {
       taskId.value = newTaskId
@@ -220,6 +225,10 @@ onMounted(() => {
   const container = containerRef.value
   if (!container) return
   rendererRef.value = new ThreeRenderer(container)
+  // 渲染器就绪后若尚未加载过数据，触发加载（watch 的 immediate 在 onMounted 前执行，当时 rendererRef 为 null）
+  if (!dataRange.value) {
+    loadVoxelGrid(filename.value)
+  }
 })
 
 onUnmounted(() => {
@@ -306,6 +315,13 @@ watch(
             style="width: 100%"
             :options="[{ label: 'js', value: 'js' }]"
           />
+        </a-col>
+        <a-col :span="6">
+          <div style="margin-bottom: 8px; color: #7aa2f7">使用缓存数据</div>
+          <a-radio-group v-model:value="useCachedData">
+            <a-radio :value="true">是</a-radio>
+            <a-radio :value="false">否</a-radio>
+          </a-radio-group>
         </a-col>
         <a-col :span="24">
           <div style="margin-bottom: 8px; color: #7aa2f7">

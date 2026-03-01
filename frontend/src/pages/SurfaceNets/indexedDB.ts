@@ -3,14 +3,21 @@
  */
 
 const DB_NAME = 'voxel-grid-cache'
-const DB_VERSION = 2
+const DB_VERSION = 3
 const STORE_NAME = 'chunks'
+const SHAPE_STORE_NAME = 'shape_meta'
 
 interface ChunkCache {
   buffer: ArrayBuffer
   min: number
   max: number
   timestamp: number
+}
+
+export interface ShapeMeta {
+  shape: [number, number, number]
+  chunks: Array<{ index: number; start: number; end: number }>
+  dataLength: number
 }
 
 class IndexedDBManager {
@@ -34,13 +41,16 @@ class IndexedDBManager {
           store.createIndex('file', 'file', { unique: false })
           store.createIndex('timestamp', 'timestamp', { unique: false })
         }
+        if (!db.objectStoreNames.contains(SHAPE_STORE_NAME)) {
+          db.createObjectStore(SHAPE_STORE_NAME, { keyPath: 'key' })
+        }
       }
     })
     return this.initPromise
   }
 
   private getCacheKey (file: string, chunkSize: number, chunkIndex: number): string {
-    return `${file}_${chunkSize}_${chunkIndex}`
+    return `${file}_${Number(chunkSize)}_${chunkIndex}`
   }
 
   async getChunk (file: string, chunkSize: number, chunkIndex: number): Promise<ChunkCache | null> {
@@ -86,6 +96,61 @@ class IndexedDBManager {
       })
     } catch (error) {
       console.error('[IndexedDB] 保存缓存失败:', error)
+    }
+  }
+
+  private getShapeMetaKey (file: string, chunkSize: number): string {
+    return `shape_${file}_${Number(chunkSize)}`
+  }
+
+  async getShapeMeta (file: string, chunkSize: number): Promise<ShapeMeta | null> {
+    try {
+      const db = await this.init()
+      const key = this.getShapeMetaKey(file, chunkSize)
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction([SHAPE_STORE_NAME], 'readonly')
+        const store = transaction.objectStore(SHAPE_STORE_NAME)
+        const request = store.get(key)
+        request.onsuccess = () => {
+          const result = request.result
+          if (result?.shape && result?.chunks != null && result?.dataLength != null) {
+            resolve({
+              shape: result.shape,
+              chunks: result.chunks,
+              dataLength: result.dataLength
+            })
+          } else {
+            resolve(null)
+          }
+        }
+        request.onerror = () => reject(new Error('读取 shape 元数据失败'))
+      })
+    } catch (error) {
+      console.warn('[IndexedDB] 读取 shape 元数据失败:', error)
+      return null
+    }
+  }
+
+  async saveShapeMeta (
+    file: string,
+    chunkSize: number,
+    shape: [number, number, number],
+    chunks: Array<{ index: number; start: number; end: number }>,
+    dataLength: number
+  ): Promise<void> {
+    try {
+      const db = await this.init()
+      const key = this.getShapeMetaKey(file, chunkSize)
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction([SHAPE_STORE_NAME], 'readwrite')
+        const store = transaction.objectStore(SHAPE_STORE_NAME)
+        const data = { key, file, chunkSize, shape, chunks, dataLength }
+        const request = store.put(data)
+        request.onsuccess = () => resolve()
+        request.onerror = () => reject(new Error('保存 shape 元数据失败'))
+      })
+    } catch (error) {
+      console.warn('[IndexedDB] 保存 shape 元数据失败:', error)
     }
   }
 }
