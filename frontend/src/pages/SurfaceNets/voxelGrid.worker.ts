@@ -4,10 +4,6 @@ declare const __DEV__: boolean
 
 // @ts-expect-error - surfacenets.js 没有类型定义
 import { surfaceNets } from './surfacenets.js'
-import { PerformanceTracker } from '@/common/performance/tracker'
-
-const threadId = crypto.randomUUID().slice(0, 8)
-const tracker = new PerformanceTracker({ group: 'worker', threadId })
 
 type WorkerInputMessage = {
   type: 'load'
@@ -18,7 +14,6 @@ type WorkerInputMessage = {
   level?: number
   min?: number
   max?: number
-  sessionId?: string
   workerIndex?: number
 }
 
@@ -41,21 +36,10 @@ const ctx = self as unknown as DedicatedWorkerGlobalScope
 self.addEventListener('message', async (event: MessageEvent<WorkerInputMessage>) => {
   if (event.data.type !== 'load') return
   try {
-    const { shape, dataBuffer, level, min, max, workerIndex, sessionId } = event.data
-    tracker.setSessionId(sessionId ?? '')
-    const workerThreadId = workerIndex !== undefined ? `chunk合并线程${workerIndex}` : 'chunk合并线程0'
-    const eventId = `parse_data_${workerThreadId}`
-    if (typeof __DEV__ !== 'undefined' && __DEV__) {
-      tracker.startRecord(eventId, 'VoxelGrid Worker 解析数据')
-    }
+    const { shape, dataBuffer, level, min, max, workerIndex } = event.data
     const data = new Float64Array(dataBuffer)
     const selectedLevel = level !== undefined ? level : (min! + max!) / 2
-    if (typeof __DEV__ !== 'undefined' && __DEV__) tracker.endRecord(eventId)
 
-    const surfaceEventId = `surface_calculation_${workerThreadId}`
-    if (typeof __DEV__ !== 'undefined' && __DEV__) {
-      tracker.startRecord(surfaceEventId, 'VoxelGrid Worker 等值面计算')
-    }
     const [xm, ym, zm] = shape
     const potential = (x: number, y: number, z: number): number => {
       const i = Math.floor(x) - 1
@@ -69,7 +53,6 @@ self.addEventListener('message', async (event: MessageEvent<WorkerInputMessage>)
     }
     const extendedShape: [number, number, number] = [shape[0] + 2, shape[1] + 2, shape[2] + 2]
     const result = surfaceNets(extendedShape, potential, undefined)
-    if (typeof __DEV__ !== 'undefined' && __DEV__) tracker.endRecord(surfaceEventId)
 
     const flatPositions = new Float32Array(result.positions.length * 3)
     for (let i = 0; i < result.positions.length; i++) {

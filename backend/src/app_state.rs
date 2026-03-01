@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use crate::performance::PerformanceStore;
 use crate::task::TaskStore;
 use crate::utils::parser_registry::ParserRegistry;
 
@@ -9,5 +8,4 @@ pub struct AppState {
     pub parser_registry: Arc<ParserRegistry>,
     pub resource_dir: String,
     pub task_store: Arc<TaskStore>,
-    pub performance_store: Arc<PerformanceStore>,
 }

@@ -3,12 +3,6 @@ import { ref, onMounted, onUnmounted, watch } from 'vue'
 import VoxelGridWorker from './voxelGrid.worker.ts?worker'
 import { ThreeRenderer } from './render'
 import { dataSource } from './dataSource'
-import {
-  PerformanceTracker,
-  performanceDB,
-  FlameGraph
-} from '@/common/performance'
-import type { PerformanceRecord, PerformanceSession } from '@/common/performance'
 
 const colorMap = [
   '#313695', '#4575b4', '#74add1', '#abd9e9', '#e0f3f8',
@@ -38,17 +32,8 @@ watch(useCachedData, (val) => {
 })
 const dataRange = ref<{ min: number; max: number } | null>(null)
 const taskId = ref<string | null>(null)
-const currentSessionId = ref<string | null>(null)
-const showPerformance = ref(false)
-const performanceSession = ref<PerformanceSession | null>(null)
 const displayLevel = ref<number | null>(null)
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
-
-function getTracker (): PerformanceTracker {
-  const t = (window as Window & { tracker?: PerformanceTracker }).tracker
-  if (!t) throw new Error('window.tracker 未初始化')
-  return t
-}
 
 async function loadVoxelGrid (name: string, levelValue?: number) {
   const renderer = rendererRef.value
@@ -56,29 +41,25 @@ async function loadVoxelGrid (name: string, levelValue?: number) {
     error.value = '渲染器未初始化'
     return
   }
-  loading.value = true
-  error.value = null
-  const sessionId = Date.now().toString()
-  const tr = getTracker()
-  tr.setSessionId(sessionId)
-  currentSessionId.value = sessionId
-  await performanceDB.init()
+  // 仅在实际加载体素数据时显示“加载中”；仅更新等值面时不影响“数据已加载”状态
+  const isVoxelLoad = dataRange.value === null
+  if (isVoxelLoad) {
+    loading.value = true
+    error.value = null
+  }
 
   try {
     const loadResult = await dataSource.loadData(name, chunkSize.value, useCachedData.value)
     const { chunks: chunkResults, shape, taskId: newTaskId } = loadResult
     if (newTaskId) {
       taskId.value = newTaskId
-      tr.updateMetadata({ taskId: newTaskId })
     }
 
-    tr.startRecord('merge_chunks', `合并chunk数据 (${chunkResults.length}个)`)
     const totalLength = chunkResults.reduce((sum, r) => sum + r.buffer.byteLength / 8, 0)
     const mergedData = new Float64Array(totalLength)
     let offset = 0
     let globalMin = chunkResults[0]?.min ?? 0
     let globalMax = chunkResults[0]?.max ?? 0
-    tr.startRecord('calc_minmax', '计算全局min/max')
     for (const result of chunkResults) {
       const chunkArray = new Float64Array(result.buffer)
       mergedData.set(chunkArray, offset)
@@ -86,8 +67,6 @@ async function loadVoxelGrid (name: string, levelValue?: number) {
       if (result.min < globalMin) globalMin = result.min
       if (result.max > globalMax) globalMax = result.max
     }
-    tr.endRecord('calc_minmax')
-    tr.endRecord('merge_chunks')
 
     if (dataRange.value === null) {
       const def = (globalMin + globalMax) / 2
@@ -105,12 +84,8 @@ async function loadVoxelGrid (name: string, levelValue?: number) {
         if (message.type === 'result') {
           try {
             const { positionsData, positionsLength, cellsData, cellsLength, shape: s, min: mn, max: mx, level: resultLevel } = message
-            const tr2 = getTracker()
-            tr2.startRecord('calc_color', '计算颜色')
             const color = getColorFromValue(resultLevel, mn, mx)
-            tr2.endRecord('calc_color')
             if (rendererRef.value) {
-              tr2.startRecord('render_mesh', '渲染网格')
               rendererRef.value.updateMesh(
                 positionsData,
                 positionsLength,
@@ -119,9 +94,7 @@ async function loadVoxelGrid (name: string, levelValue?: number) {
                 s,
                 color
               )
-              tr2.endRecord('render_mesh')
             }
-            await tr2.complete()
             loading.value = false
           } catch (err) {
             error.value = err instanceof Error ? err.message : '渲染网格时出错'
@@ -138,7 +111,6 @@ async function loadVoxelGrid (name: string, levelValue?: number) {
       }
     }
 
-    tr.startRecord('send_to_worker', '发送数据到VoxelGrid Worker')
     workerRef.value.postMessage(
       {
         type: 'load',
@@ -148,12 +120,10 @@ async function loadVoxelGrid (name: string, levelValue?: number) {
         dataBuffer: mergedData.buffer,
         level: levelValue,
         min: finalMin,
-        max: finalMax,
-        sessionId
+        max: finalMax
       },
       [mergedData.buffer]
     )
-    tr.endRecord('send_to_worker')
   } catch (err) {
     error.value = err instanceof Error ? err.message : '加载数据时出错'
     loading.value = false
@@ -166,59 +136,6 @@ function scheduleLevelUpdate (val: number) {
   debounceTimer = setTimeout(() => {
     level.value = val
   }, 200)
-}
-
-async function showPerformancePanel () {
-  const sid = currentSessionId.value
-  if (!sid) return
-  await performanceDB.init()
-  await performanceDB.flushPendingRecords(sid)
-  let session = await performanceDB.getSession(sid)
-  if (session?.records?.length) {
-    const allTimes = session.records
-      .flatMap((r) => [r.startTime, r.endTime])
-      .filter((t) => typeof t === 'number' && !isNaN(t))
-    if (allTimes.length > 0 && (isNaN(session.sessionStartTime) || isNaN(session.sessionEndTime))) {
-      session = {
-        ...session,
-        sessionStartTime: Math.min(...allTimes),
-        sessionEndTime: Math.max(...allTimes)
-      }
-    }
-  }
-  try {
-    const response = await fetch(`/api/performance?session_id=${encodeURIComponent(sid)}`)
-    if (response.ok) {
-      const backendData = await response.json()
-      const backendRecords = (backendData.records ?? []) as PerformanceRecord[]
-      if (backendRecords.length > 0 && session) {
-        const mergedRecords = [...session.records, ...backendRecords]
-        const allTimes = mergedRecords
-          .flatMap((r) => [r.startTime, r.endTime])
-          .filter((t) => typeof t === 'number' && !isNaN(t))
-        session = {
-          ...session,
-          records: mergedRecords,
-          sessionStartTime: allTimes.length > 0 ? Math.min(...allTimes) : session.sessionStartTime,
-          sessionEndTime: allTimes.length > 0 ? Math.max(...allTimes) : session.sessionEndTime
-        }
-      } else if (backendRecords.length > 0 && !session) {
-        const allTimes = backendRecords
-          .flatMap((r) => [r.startTime, r.endTime])
-          .filter((t) => typeof t === 'number' && !isNaN(t))
-        session = {
-          sessionId: sid,
-          sessionStartTime: allTimes.length > 0 ? Math.min(...allTimes) : Date.now(),
-          sessionEndTime: allTimes.length > 0 ? Math.max(...allTimes) : Date.now(),
-          records: backendRecords
-        }
-      }
-    }
-  } catch (err) {
-    console.error('[性能分析] 从后端加载性能数据失败:', err)
-  }
-  performanceSession.value = session ?? null
-  showPerformance.value = true
 }
 
 onMounted(() => {
@@ -346,23 +263,6 @@ watch(
         </a-col>
       </a-row>
     </a-card>
-
-    <a-card size="small" style="margin-bottom: 16px">
-      <a-space>
-        <a-button
-          type="primary"
-          :disabled="!currentSessionId"
-          @click="showPerformancePanel"
-        >
-          查看性能分析
-        </a-button>
-        <a-button v-if="showPerformance" @click="showPerformance = false">
-          关闭性能分析
-        </a-button>
-      </a-space>
-    </a-card>
-
-    <FlameGraph v-if="showPerformance" :session="performanceSession" />
 
     <div
       ref="containerRef"

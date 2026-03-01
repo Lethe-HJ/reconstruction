@@ -2,11 +2,6 @@
 
 declare const __DEV__: boolean
 
-import { PerformanceTracker } from '@/common/performance/tracker'
-
-const threadId = crypto.randomUUID().slice(0, 8)
-const tracker = new PerformanceTracker({ group: 'worker', threadId })
-
 type ChunkRequestMessage =
   | {
       type: 'fetch-chunk'
@@ -14,7 +9,6 @@ type ChunkRequestMessage =
       chunkIndex: number
       start: number
       length: number
-      sessionId: string
     }
   | { type: 'pre-close' }
 
@@ -22,24 +16,13 @@ const ctx = self as unknown as DedicatedWorkerGlobalScope
 
 self.addEventListener('message', async (event: MessageEvent<ChunkRequestMessage>) => {
   if (event.data.type === 'pre-close') {
-    try {
-      await tracker.complete()
-      ctx.postMessage({ type: 'close-ok' })
-    } catch (err) {
-      console.error('[Worker] tracker.complete() 失败:', err)
-      ctx.postMessage({ type: 'close-ok' })
-    }
+    ctx.postMessage({ type: 'close-ok' })
     return
   }
   if (event.data.type !== 'fetch-chunk') return
-  const { taskId, chunkIndex, start, length, sessionId } = event.data
-  tracker.setSessionId(sessionId)
+  const { taskId, chunkIndex, start, length } = event.data
   const url = `/api/voxel-grid/chunk?task_id=${encodeURIComponent(taskId)}&chunk_index=${chunkIndex}`
   try {
-    const eventId = `fetch_chunk_${chunkIndex}`
-    if (typeof __DEV__ !== 'undefined' && __DEV__) {
-      tracker.startRecord(eventId, `Worker 请求 Chunk ${chunkIndex}`)
-    }
     let response: Response
     let retryCount = 0
     const maxRetries = 10
@@ -60,12 +43,7 @@ self.addEventListener('message', async (event: MessageEvent<ChunkRequestMessage>
       throw new Error(message.error ?? `HTTP ${response.status}`)
     }
     const buffer = await response.arrayBuffer()
-    if (typeof __DEV__ !== 'undefined' && __DEV__) tracker.endRecord(eventId)
 
-    const parseEventId = `parse_chunk_${chunkIndex}`
-    if (typeof __DEV__ !== 'undefined' && __DEV__) {
-      tracker.startRecord(parseEventId, `Worker 解析 Chunk ${chunkIndex} 数据`)
-    }
     const data = new Float64Array(buffer)
     const first = data[0]
     let minVal = typeof first === 'number' ? first : 0
@@ -77,7 +55,6 @@ self.addEventListener('message', async (event: MessageEvent<ChunkRequestMessage>
         if (v > maxVal) maxVal = v
       }
     }
-    tracker.endRecord(parseEventId)
 
     ctx.postMessage(
       { type: 'chunk', chunkIndex, start, length, buffer, min: minVal, max: maxVal },

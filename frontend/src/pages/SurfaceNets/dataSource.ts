@@ -4,8 +4,6 @@
 
 import ChunkLoaderWorker from './chunkLoader.worker.ts?worker'
 import { indexedDBManager } from './indexedDB'
-import { recordPerformanceFromResponse } from '@/common/performance'
-
 
 const SHAPE_CACHE_KEY_PREFIX = 'voxel-grid-shape_'
 
@@ -39,10 +37,6 @@ export interface DataLoadResult {
   dataLength: number
   taskId: string | null
   allFromCache: boolean
-}
-
-function getTracker () {
-  return window.tracker
 }
 
 export class DataSource {
@@ -85,7 +79,6 @@ export class DataSource {
   ): Promise<ChunkResult[]> {
     const taskId = preprocessResponse.task_id
     const chunks = preprocessResponse.chunks
-    const tracker = getTracker()
 
     // 先尝试从 IndexedDB 一次性取齐所有 chunk，若全部命中则直接返回，不发任何 chunk 请求
     const cacheResults = await Promise.all(
@@ -157,7 +150,6 @@ export class DataSource {
           chunkIndex: chunk.index,
           start: chunk.start,
           length: chunk.end - chunk.start,
-          sessionId: tracker?.getSessionId() ?? '',
           workerIndex
         })
       })
@@ -192,7 +184,6 @@ export class DataSource {
     let shape: [number, number, number]
     let dataLength: number
     let taskId: string | null = null
-    const tracker = getTracker()
 
     // 优先 localStorage，若无则从 IndexedDB 读 shape 元数据（chunk 已在 IndexedDB 时可不发 preprocess）
     const localShape = useCache ? this.getShapeFromCache(filename, chunkSize) : null
@@ -215,13 +206,9 @@ export class DataSource {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           file: filename,
-          chunk_size: chunkSize,
-          session_id: tracker?.getSessionId()
+          chunk_size: chunkSize
         })
       })
-      if (tracker) {
-        await recordPerformanceFromResponse(preprocessRes.clone(), tracker.getSessionId()).catch(() => {})
-      }
       if (!preprocessRes.ok) {
         const errorData = await preprocessRes.json().catch(() => ({ error: `HTTP ${preprocessRes.status}` }))
         throw new Error(errorData.error ?? `预处理失败: HTTP ${preprocessRes.status}`)

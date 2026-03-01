@@ -1,7 +1,6 @@
 mod app_state;
 mod handlers;
 mod parsers;
-mod performance;
 mod routes;
 mod task;
 mod utils;
@@ -10,7 +9,6 @@ use std::sync::Arc;
 
 use actix_web::{App, HttpServer, web};
 
-use crate::performance::PerformanceStore;
 use crate::utils::parser_registry::ParserRegistry;
 use app_state::AppState;
 use task::TaskStore;
@@ -28,12 +26,10 @@ async fn main() -> std::io::Result<()> {
     }
 
     let task_store = Arc::new(TaskStore::new());
-    let performance_store = Arc::new(PerformanceStore::new());
     let app_state = web::Data::new(AppState {
         parser_registry,
         resource_dir: resource_dir.clone(),
         task_store: task_store.clone(),
-        performance_store: performance_store.clone(),
     });
 
     // 启动后台清理任务：定期清理过期的任务

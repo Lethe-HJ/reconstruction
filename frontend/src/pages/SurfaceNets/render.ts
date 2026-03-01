@@ -71,11 +71,10 @@ export class ThreeRenderer {
     cellsLength: number,
     voxelShape: [number, number, number],
     color: string = '#7aa2f7'
-  ): number {
-    const tStart = performance.now()
+  ): void {
     if (positionsLength <= 0 || cellsLength <= 0) {
       console.warn('警告: 无效的网格数据长度', { positionsLength, cellsLength })
-      return 0
+      return
     }
     void voxelShape
     if (this.mesh) {
@@ -119,7 +118,6 @@ export class ThreeRenderer {
     this.controls.update()
     this.scene.add(mesh)
     this.mesh = mesh
-    return performance.now() - tStart
   }
 
   dispose (): void {

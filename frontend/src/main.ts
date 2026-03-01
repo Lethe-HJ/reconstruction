@@ -4,20 +4,6 @@ import 'ant-design-vue/dist/reset.css'
 import './style.css'
 import App from './App.vue'
 import router from './router'
-import { PerformanceTracker } from '@/common/performance'
-
-declare global {
-  interface Window {
-    tracker?: PerformanceTracker
-  }
-}
-
-const tracker = new PerformanceTracker({
-  group: 'web_main',
-  threadId: 'web_main'
-})
-tracker.setSessionId(Date.now().toString())
-window.tracker = tracker
 
 async function clearAllIndexedDB () {
   try {
@@ -47,7 +33,6 @@ async function clearAllIndexedDB () {
       }
     } else {
       const knownDatabases = [
-        { name: 'performance-trace-db', version: 1 },
         { name: 'voxel-grid-cache', version: 2 }
       ]
       for (const dbInfo of knownDatabases) {
