@@ -2,8 +2,7 @@
 
 declare const __DEV__: boolean
 
-// @ts-expect-error - surfacenets.js 没有类型定义
-import { surfaceNets } from './surfacenets.js'
+import { surfaceNets } from './surfacenets'
 
 type WorkerInputMessage = {
   type: 'load'
@@ -36,7 +35,7 @@ const ctx = self as unknown as DedicatedWorkerGlobalScope
 self.addEventListener('message', async (event: MessageEvent<WorkerInputMessage>) => {
   if (event.data.type !== 'load') return
   try {
-    const { shape, dataBuffer, level, min, max, workerIndex } = event.data
+    const { shape, dataBuffer, level, min, max } = event.data
     const data = new Float64Array(dataBuffer)
     const selectedLevel = level !== undefined ? level : (min! + max!) / 2
 
