@@ -142,7 +142,7 @@ async function loadVoxelGrid (name: string, levelValue?: number) {
     workerRef.value.postMessage(
       {
         type: 'load',
-        taskId: newTaskId ?? '',
+        taskId: newTaskId ?? taskId.value ?? '',
         shape,
         chunks: chunkResults.map((r) => ({ index: r.chunkIndex, start: 0, end: 0 })),
         dataBuffer: mergedData.buffer,
@@ -256,7 +256,7 @@ watch(
 watch(
   level,
   (val) => {
-    if (val !== null && rendererRef.value && dataRange.value && taskId.value) {
+    if (val !== null && rendererRef.value && dataRange.value) {
       loadVoxelGrid(filename.value, val)
     }
   }
@@ -338,10 +338,9 @@ watch(
             v-if="dataRange && displayLevel !== null"
             :min="dataRange.min"
             :max="dataRange.max"
-            :value="displayLevel"
+            v-model:value="displayLevel"
             :step="Math.max((dataRange.max - dataRange.min) / 1000, 1e-10)"
             :tooltip-formatter="(v: number) => v?.toFixed(4)"
-            @update:value="(v: number) => { displayLevel = v }"
           />
           <a-slider v-else disabled />
         </a-col>
