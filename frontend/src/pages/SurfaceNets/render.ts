@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+import Stats from 'three/examples/jsm/libs/stats.module.js'
 
 export class ThreeRenderer {
   private scene: THREE.Scene
@@ -7,6 +8,7 @@ export class ThreeRenderer {
   private renderer: THREE.WebGLRenderer
   private controls: OrbitControls
   private container: HTMLElement
+  private stats: InstanceType<typeof Stats>
   private mesh: THREE.Mesh | null = null
   private animationId: number | null = null
   private resizeHandler: () => void
@@ -24,6 +26,12 @@ export class ThreeRenderer {
     this.renderer.setSize(width, height)
     this.renderer.setPixelRatio(window.devicePixelRatio)
     container.appendChild(this.renderer.domElement)
+    this.stats = new Stats() as InstanceType<typeof Stats>
+    this.stats.dom.style.position = 'absolute'
+    this.stats.dom.style.left = ''
+    this.stats.dom.style.right = '0'
+    this.stats.dom.style.top = '0'
+    container.appendChild(this.stats.dom)
     this.setupLights()
     const axesHelper = new THREE.AxesHelper(50)
     this.scene.add(axesHelper)
@@ -60,8 +68,10 @@ export class ThreeRenderer {
 
   private animate = (): void => {
     this.animationId = requestAnimationFrame(this.animate)
+    this.stats.begin()
     this.controls.update()
     this.renderer.render(this.scene, this.camera)
+    this.stats.end()
   }
 
   updateMesh (
@@ -138,6 +148,9 @@ export class ThreeRenderer {
         }
       }
       this.mesh = null
+    }
+    if (this.stats?.dom?.parentNode) {
+      this.container.removeChild(this.stats.dom)
     }
     if (this.renderer) {
       this.container.removeChild(this.renderer.domElement)

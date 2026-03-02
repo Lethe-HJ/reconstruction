@@ -297,7 +297,7 @@ watch(displayLevel, (val) => {
 
     <div
       ref="containerRef"
-      style="flex: 1; width: 100%; min-height: 600px; background-color: #1a1b26"
+      style="flex: 1; width: 100%; min-height: 600px; background-color: #1a1b26; position: relative"
     />
   </div>
 </template>
