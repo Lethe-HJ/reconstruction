@@ -1,5 +1,5 @@
 use wasm_bindgen::prelude::*;
-use js_sys::{Float32Array, Uint32Array, Object, Reflect};
+use js_sys::{Float32Array, Function, Object, Reflect, Uint32Array};
 use std::sync::OnceLock;
 
 static CUBE_EDGES: OnceLock<[i32; 24]> = OnceLock::new();
@@ -42,30 +42,36 @@ fn init_tables() {
     });
 }
 
-#[wasm_bindgen]
-pub fn surface_nets_rust(shape: &[u32], data: &[f64], level: f64) -> Result<Object, JsValue> {
-    init_tables();
+/// 内置 potential：网格数据 + 等值面 level，与 TS 的 surfaceNets(xm, ym, zm, data, selectedLevel) 一致
+fn grid_level_potential(
+    x: f64,
+    y: f64,
+    z: f64,
+    data: &[f64],
+    level: f64,
+    xm_i: i32,
+    ym_i: i32,
+    zm_i: i32,
+) -> f64 {
+    let i = (x.floor() as i32) - 1;
+    let j = (y.floor() as i32) - 1;
+    let k = (z.floor() as i32) - 1;
+    let idx = (((i + xm_i) % xm_i) + xm_i) % xm_i;
+    let idy = (((j + ym_i) % ym_i) + ym_i) % ym_i;
+    let idz = (((k + zm_i) % zm_i) + zm_i) % zm_i;
+    let index = (idz * xm_i * ym_i + idy * xm_i + idx) as usize;
+    let val = if index < data.len() { data[index] } else { 0.0 };
+    val - level
+}
+
+/// 核心算法：接受任意 potential 函数，与 TS 的 _surfaceNets(dims, potential, bounds?) 对应
+fn run_surface_nets<F>(xm: u32, ym: u32, zm: u32, potential: F) -> (Vec<f32>, Vec<u32>)
+where
+    F: Fn(f64, f64, f64) -> f64,
+{
     let cube_edges = CUBE_EDGES.get().unwrap();
     let edge_table = EDGE_TABLE.get().unwrap();
-
-    let dims = [shape[0] + 2, shape[1] + 2, shape[2] + 2];
-    let xm = shape[0] as i32;
-    let ym = shape[1] as i32;
-    let zm = shape[2] as i32;
-
-    let potential = |x: f64, y: f64, z: f64| -> f64 {
-        let i = (x.floor() as i32) - 1;
-        let j = (y.floor() as i32) - 1;
-        let k = (z.floor() as i32) - 1;
-        
-        let idx = (((i + xm) % xm) + xm) % xm;
-        let idy = (((j + ym) % ym) + ym) % ym;
-        let idz = (((k + zm) % zm) + zm) % zm;
-        
-        let index = (idz * xm * ym + idy * xm + idx) as usize;
-        let val = if index < data.len() { data[index] } else { 0.0 };
-        val - level
-    };
+    let dims = [xm + 2, ym + 2, zm + 2];
 
     let mut vertices: Vec<f32> = Vec::new();
     let mut faces: Vec<u32> = Vec::new();
@@ -199,15 +205,63 @@ pub fn surface_nets_rust(shape: &[u32], data: &[f64], level: f64) -> Result<Obje
         r[2] = -r[2];
     }
 
+    (vertices, faces)
+}
+
+fn build_result(vertices: Vec<f32>, faces: Vec<u32>) -> Result<Object, JsValue> {
     let pos_arr = Float32Array::from(vertices.as_slice());
     let cell_arr = Uint32Array::from(faces.as_slice());
-
     let obj = Object::new();
     Reflect::set(&obj, &JsValue::from_str("positions"), &pos_arr)?;
     Reflect::set(&obj, &JsValue::from_str("cells"), &cell_arr)?;
-    
-    Reflect::set(&obj, &JsValue::from_str("positionsLength"), &JsValue::from((vertices.len() / 3) as u32))?;
-    Reflect::set(&obj, &JsValue::from_str("cellsLength"), &JsValue::from((faces.len() / 3) as u32))?;
-
+    Reflect::set(
+        &obj,
+        &JsValue::from_str("positionsLength"),
+        &JsValue::from((vertices.len() / 3) as u32),
+    )?;
+    Reflect::set(
+        &obj,
+        &JsValue::from_str("cellsLength"),
+        &JsValue::from((faces.len() / 3) as u32),
+    )?;
     Ok(obj)
+}
+
+#[wasm_bindgen]
+pub fn surface_nets(xm: u32, ym: u32, zm: u32, data: &[f64], level: f64) -> Result<Object, JsValue> {
+    init_tables();
+    let xm_i = xm as i32;
+    let ym_i = ym as i32;
+    let zm_i = zm as i32;
+    let potential = |x: f64, y: f64, z: f64| grid_level_potential(x, y, z, data, level, xm_i, ym_i, zm_i);
+    let (vertices, faces) = run_surface_nets(xm, ym, zm, potential);
+    build_result(vertices, faces)
+}
+
+/// 与 TS 的 _surfaceNets(dims, potential) 对应：由 JS 传入 potential 函数，便于自定义标量场
+#[wasm_bindgen]
+pub fn surface_nets_with_potential(
+    xm: u32,
+    ym: u32,
+    zm: u32,
+    potential_fn: JsValue,
+) -> Result<Object, JsValue> {
+    init_tables();
+    let f = potential_fn
+        .dyn_ref::<Function>()
+        .ok_or_else(|| JsValue::from_str("surface_nets_with_potential: potential_fn 必须是函数"))?
+        .clone();
+    let potential = move |x: f64, y: f64, z: f64| -> f64 {
+        f.call3(
+            &JsValue::NULL,
+            &JsValue::from_f64(x),
+            &JsValue::from_f64(y),
+            &JsValue::from_f64(z),
+        )
+        .ok()
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0)
+    };
+    let (vertices, faces) = run_surface_nets(xm, ym, zm, potential);
+    build_result(vertices, faces)
 }

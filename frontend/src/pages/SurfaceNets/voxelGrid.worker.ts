@@ -33,6 +33,16 @@ type WorkerOutputMessage =
 
 const ctx = self as unknown as DedicatedWorkerGlobalScope;
 
+// 预加载 WASM 模块，只初始化一次
+const wasmInitPromise = (async () => {
+  const wasmInit = await import("../../compute/surfacenets/pkg/wasm_surfacenets.js");
+  // @ts-ignore
+  const wasmUrl =
+    await import("../../compute/surfacenets/pkg/wasm_surfacenets_bg.wasm?url");
+  await wasmInit.default(wasmUrl.default);
+  return wasmInit;
+})();
+
 self.addEventListener(
   "message",
   async (event: MessageEvent<WorkerInputMessage>) => {
@@ -49,18 +59,9 @@ self.addEventListener(
 
       if (event.data.computeEnv === "rust") {
         console.time("surfaceNets (Rust)");
-        const wasmInit =
-          await import("../../compute/surfacenets/pkg/wasm_surfacenets.js");
-        // @ts-ignore
-        const wasmUrl =
-          await import("../../compute/surfacenets/pkg/wasm_surfacenets_bg.wasm?url");
-        // 等待 wasm 初始化，如果是在 Worker 里通常需要传入 wasm 的路径
-        await wasmInit.default(wasmUrl.default);
-        const result = wasmInit.surface_nets_rust(
-          new Uint32Array(shape),
-          data,
-          selectedLevel,
-        ) as any;
+        const wasmInit = await wasmInitPromise;
+        const surfaceNetsWasm = (wasmInit as unknown as { surface_nets: (xm: number, ym: number, zm: number, data: Float64Array, level: number) => { positions: Float32Array; cells: Uint32Array; positionsLength: number; cellsLength: number } }).surface_nets;
+        const result = surfaceNetsWasm(xm, ym, zm, data, selectedLevel);
 
         flatPositions = result.positions;
         flatCells = result.cells;
