@@ -219,11 +219,16 @@ watch(displayLevel, (val) => {
 
 <template>
   <div
-    style="padding: 24px; height: 100%; display: flex; flex-direction: column"
+    style="padding: 12px; height: 100%; display: flex; flex-direction: column"
   >
-    <a-card title="SurfaceNets 3D 可视化" style="margin-bottom: 16px">
+    <a-card
+      title="SurfaceNets 3D 可视化"
+      size="small"
+      style="margin-bottom: 8px"
+      :body-style="{ padding: '12px 16px' }"
+    >
       <template #extra>
-        <a-space>
+        <a-space size="small">
           <span v-if="loading" style="color: #7aa2f7">加载中...</span>
           <span v-if="error" style="color: #f7768e">错误: {{ error }}</span>
           <span v-if="!loading && !error && dataRange" style="color: #9ece6a"
@@ -231,21 +236,21 @@ watch(displayLevel, (val) => {
           >
         </a-space>
       </template>
-      <a-row :gutter="[16, 16]">
+      <a-row :gutter="[12, 8]" align="middle">
         <a-col :span="6">
-          <div style="margin-bottom: 8px; color: #7aa2f7">选择文件</div>
+          <div class="controlLabel">选择文件</div>
           <a-select
             v-model:value="filename"
+            size="small"
             style="width: 100%"
             :options="[{ label: 'CHGDIFF.vasp', value: 'CHGDIFF.vasp' }]"
           />
         </a-col>
         <a-col :span="6">
-          <div style="margin-bottom: 8px; color: #7aa2f7">
-            分块大小 (元素数)
-          </div>
+          <div class="controlLabel">分块大小 (元素数)</div>
           <a-input-number
             v-model:value="chunkSize"
+            size="small"
             style="width: 100%"
             :min="1000"
             :step="100000"
@@ -254,9 +259,10 @@ watch(displayLevel, (val) => {
           />
         </a-col>
         <a-col :span="6">
-          <div style="margin-bottom: 8px; color: #7aa2f7">选择计算环境</div>
+          <div class="controlLabel">计算环境</div>
           <a-select
             v-model:value="computeEnv"
+            size="small"
             style="width: 100%"
             :options="[
               { label: 'js', value: 'js' },
@@ -265,21 +271,21 @@ watch(displayLevel, (val) => {
           />
         </a-col>
         <a-col :span="6">
-          <div style="margin-bottom: 8px; color: #7aa2f7">使用缓存数据</div>
-          <a-radio-group v-model:value="useCachedData">
+          <div class="controlLabel">使用缓存</div>
+          <a-radio-group v-model:value="useCachedData" size="small">
             <a-radio :value="true">是</a-radio>
             <a-radio :value="false">否</a-radio>
           </a-radio-group>
         </a-col>
         <a-col :span="24">
-          <div style="margin-bottom: 8px; color: #7aa2f7">
-            选择等值面
+          <div class="controlLabel">
+            等值面
             <span
               v-if="displayLevel !== null && dataRange"
-              style="margin-left: 8px; color: #9ece6a"
+              style="margin-left: 6px; color: #9ece6a; font-weight: normal"
             >
-              {{ displayLevel.toFixed(4) }} (范围:
-              {{ dataRange.min.toFixed(4) }} - {{ dataRange.max.toFixed(4) }})
+              {{ displayLevel.toFixed(4) }} ({{ dataRange.min.toFixed(4) }} -
+              {{ dataRange.max.toFixed(4) }})
             </span>
           </div>
           <a-slider
@@ -289,8 +295,9 @@ watch(displayLevel, (val) => {
             v-model:value="displayLevel"
             :step="Math.max((dataRange.max - dataRange.min) / 1000, 1e-10)"
             :tooltip-formatter="(v: number) => v?.toFixed(4)"
+            style="margin: 0 8px 0 0"
           />
-          <a-slider v-else disabled />
+          <a-slider v-else disabled style="margin: 0 8px 0 0" />
         </a-col>
       </a-row>
     </a-card>
@@ -301,3 +308,11 @@ watch(displayLevel, (val) => {
     />
   </div>
 </template>
+
+<style scoped>
+.controlLabel {
+  margin-bottom: 4px;
+  color: #7aa2f7;
+  font-size: 12px;
+}
+</style>
