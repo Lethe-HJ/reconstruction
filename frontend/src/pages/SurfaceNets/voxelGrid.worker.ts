@@ -4,6 +4,13 @@ declare const __DEV__: boolean;
 
 import { surfaceNets } from "../../compute/surfacenets/src/surfacenets.js";
 
+type SurfaceNetsWasmResult = {
+  positions: Float32Array;
+  cells: Uint32Array;
+  positionsLength: number;
+  cellsLength: number;
+};
+
 type WorkerInputMessage = {
   type: "load";
   taskId: string;
@@ -35,7 +42,8 @@ const ctx = self as unknown as DedicatedWorkerGlobalScope;
 
 // 预加载 WASM 模块，只初始化一次
 const wasmInitPromise = (async () => {
-  const wasmInit = await import("../../compute/surfacenets/pkg/wasm_surfacenets.js");
+  const wasmInit =
+    await import("../../compute/surfacenets/pkg/wasm_surfacenets.js");
   // @ts-ignore
   const wasmUrl =
     await import("../../compute/surfacenets/pkg/wasm_surfacenets_bg.wasm?url");
@@ -60,8 +68,13 @@ self.addEventListener(
       if (event.data.computeEnv === "rust") {
         console.time("surfaceNets (Rust)");
         const wasmInit = await wasmInitPromise;
-        const surfaceNetsWasm = (wasmInit as unknown as { surface_nets: (xm: number, ym: number, zm: number, data: Float64Array, level: number) => { positions: Float32Array; cells: Uint32Array; positionsLength: number; cellsLength: number } }).surface_nets;
-        const result = surfaceNetsWasm(xm, ym, zm, data, selectedLevel);
+        const result = wasmInit.surface_nets(
+          xm,
+          ym,
+          zm,
+          data,
+          selectedLevel,
+        ) as SurfaceNetsWasmResult;
 
         flatPositions = result.positions;
         flatCells = result.cells;
