@@ -23,7 +23,7 @@ const loading = ref(false)
 const error = ref<string | null>(null)
 const filename = ref('CHGDIFF.vasp')
 const chunkSize = ref(5e4)
-const computeEnv = ref('js')
+const computeEnv = ref('rust')
 const useCachedData = ref(localStorage.getItem('useCachedData') !== 'false')
 const level = ref<number | null>(null)
 

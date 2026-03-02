@@ -2,7 +2,7 @@
 
 declare const __DEV__: boolean
 
-import { surfaceNets } from './surfacenets'
+import { surfaceNets } from '../../compute/surfacenets/src/surfacenets.js'
 
 type WorkerInputMessage = {
   type: 'load'
@@ -60,9 +60,9 @@ self.addEventListener('message', async (event: MessageEvent<WorkerInputMessage>)
 
     if (event.data.computeEnv === 'rust') {
       console.time('surfaceNets (Rust)');
-      const wasmInit = await import('../../wasm-surfacenets/wasm_surfacenets.js');
+      const wasmInit = await import('../../compute/surfacenets/pkg/wasm_surfacenets.js');
       // @ts-ignore
-      const wasmUrl = await import('../../wasm-surfacenets/wasm_surfacenets_bg.wasm?url');
+      const wasmUrl = await import('../../compute/surfacenets/pkg/wasm_surfacenets_bg.wasm?url');
       // 等待 wasm 初始化，如果是在 Worker 里通常需要传入 wasm 的路径
       await wasmInit.default(wasmUrl.default);
       const result = wasmInit.surface_nets_rust(new Uint32Array(shape), data, selectedLevel) as any;
