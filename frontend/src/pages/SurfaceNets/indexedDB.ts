@@ -3,9 +3,10 @@
  */
 
 const DB_NAME = 'voxel-grid-cache'
-const DB_VERSION = 3
+const DB_VERSION = 5
 const STORE_NAME = 'chunks'
 const SHAPE_STORE_NAME = 'shape_meta'
+const INTERPOLATION_STORE_NAME = 'interpolation'
 
 interface ChunkCache {
   buffer: ArrayBuffer
@@ -43,6 +44,9 @@ class IndexedDBManager {
         }
         if (!db.objectStoreNames.contains(SHAPE_STORE_NAME)) {
           db.createObjectStore(SHAPE_STORE_NAME, { keyPath: 'key' })
+        }
+        if (!db.objectStoreNames.contains(INTERPOLATION_STORE_NAME)) {
+          db.createObjectStore(INTERPOLATION_STORE_NAME, { keyPath: 'key' })
         }
       }
     })
@@ -151,6 +155,49 @@ class IndexedDBManager {
       })
     } catch (error) {
       console.warn('[IndexedDB] 保存 shape 元数据失败:', error)
+    }
+  }
+
+  async getInterpolation (key: string): Promise<{ buffer: ArrayBuffer; shape: [number, number, number] } | null> {
+    try {
+      const db = await this.init()
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction([INTERPOLATION_STORE_NAME], 'readonly')
+        const store = transaction.objectStore(INTERPOLATION_STORE_NAME)
+        const request = store.get(key)
+        request.onsuccess = () => {
+          const result = request.result
+          if (result?.buffer && result?.shape) {
+            resolve({ buffer: result.buffer, shape: result.shape })
+          } else {
+            resolve(null)
+          }
+        }
+        request.onerror = () => reject(new Error('读取 interpolation 缓存失败'))
+      })
+    } catch (error) {
+      console.warn('[IndexedDB] 获取 interpolation 缓存失败:', error)
+      return null
+    }
+  }
+
+  async saveInterpolation (
+    key: string,
+    buffer: ArrayBuffer,
+    shape: [number, number, number]
+  ): Promise<void> {
+    try {
+      const db = await this.init()
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction([INTERPOLATION_STORE_NAME], 'readwrite')
+        const store = transaction.objectStore(INTERPOLATION_STORE_NAME)
+        const data = { key, buffer, shape, timestamp: Date.now() }
+        const request = store.put(data)
+        request.onsuccess = () => resolve()
+        request.onerror = () => reject(new Error('保存 interpolation 缓存失败'))
+      })
+    } catch (error) {
+      console.warn('[IndexedDB] 保存 interpolation 缓存失败:', error)
     }
   }
 }

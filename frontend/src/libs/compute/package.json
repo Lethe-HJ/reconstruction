@@ -1,0 +1,9 @@
+{
+  "name": "compute-wasm",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "build:wasm": "bash build-wasm.sh",
+    "build:wasm:release": "bash build-wasm.sh --release"
+  }
+}

@@ -42,9 +42,9 @@ const ctx = self as unknown as DedicatedWorkerGlobalScope;
 
 // 预加载 WASM 模块，只初始化一次
 const wasmInitPromise = (async () => {
-  const wasmInit = await import("../../libs/compute/pkg/wasm_surfacenets.js");
+  const wasmInit = await import("../../libs/compute/pkg/wasm_surfacenets/wasm_surfacenets.js");
   const wasmUrl =
-    await import("../../libs/compute/pkg/wasm_surfacenets_bg.wasm?url");
+    await import("../../libs/compute/pkg/wasm_surfacenets/wasm_surfacenets_bg.wasm?url");
   await wasmInit.default(wasmUrl.default);
   return wasmInit;
 })();

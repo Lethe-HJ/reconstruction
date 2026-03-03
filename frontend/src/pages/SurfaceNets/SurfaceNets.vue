@@ -3,6 +3,7 @@ import { ref, onMounted, onUnmounted, watch } from "vue";
 import VoxelGridWorker from "./voxelGrid.worker.ts?worker";
 import { ThreeRenderer } from "./render";
 import { dataSource } from "./dataSource";
+import { get as getInterpolation } from "./interpolationStore";
 
 const colorMap = [
   "#313695",
@@ -34,6 +35,7 @@ const loading = ref(false);
 const error = ref<string | null>(null);
 const filename = ref("CHGDIFF.vasp");
 const chunkSize = ref(5e4);
+const smoothLevel = ref(1);
 const computeEnv = ref("rust");
 const useCachedData = ref(localStorage.getItem("useCachedData") !== "false");
 const level = ref<number | null>(null);
@@ -95,6 +97,20 @@ async function loadVoxelGrid(name: string, levelValue?: number) {
     const finalMin = globalMin;
     const finalMax = globalMax;
 
+    let dataToSend: ArrayBuffer = mergedData.buffer;
+    let shapeToSend: [number, number, number] = shape;
+
+    if (smoothLevel.value > 1) {
+      const interpResult = await getInterpolation(
+        newTaskId ?? taskId.value ?? "",
+        shape,
+        smoothLevel.value,
+        { dataBuffer: mergedData.buffer, computeEnv: computeEnv.value as "js" | "rust" }
+      );
+      dataToSend = interpResult.data.buffer as ArrayBuffer;
+      shapeToSend = interpResult.shape;
+    }
+
     if (!workerRef.value) {
       workerRef.value = new VoxelGridWorker();
       workerRef.value.onmessage = async (event: MessageEvent) => {
@@ -142,19 +158,19 @@ async function loadVoxelGrid(name: string, levelValue?: number) {
       {
         type: "load",
         taskId: newTaskId ?? taskId.value ?? "",
-        shape,
+        shape: shapeToSend,
         chunks: chunkResults.map((r) => ({
           index: r.chunkIndex,
           start: 0,
           end: 0,
         })),
-        dataBuffer: mergedData.buffer,
+        dataBuffer: dataToSend,
         level: levelValue,
         min: finalMin,
         max: finalMax,
         computeEnv: computeEnv.value,
       },
-      [mergedData.buffer],
+      [dataToSend],
     );
   } catch (err) {
     error.value = err instanceof Error ? err.message : "加载数据时出错";
@@ -193,7 +209,7 @@ onUnmounted(() => {
 });
 
 watch(
-  [filename, chunkSize, computeEnv],
+  [filename, chunkSize, smoothLevel, computeEnv],
   () => {
     if (rendererRef.value && !dataRange.value) {
       loadVoxelGrid(filename.value);
@@ -256,6 +272,16 @@ watch(displayLevel, (val) => {
             :step="100000"
             :formatter="(v: string) => v.replace(/\B(?=(\d{3})+(?!\d))/g, ',')"
             :parser="(v: string) => Number(v.replace(/\$\s?|(,*)/g, ''))"
+          />
+        </a-col>
+        <a-col :span="6">
+          <div class="controlLabel">平滑</div>
+          <a-input-number
+            v-model:value="smoothLevel"
+            size="small"
+            style="width: 100%"
+            :min="1"
+            :step="1"
           />
         </a-col>
         <a-col :span="6">
