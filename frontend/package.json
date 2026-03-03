@@ -4,11 +4,11 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "preinstall": "cd src/compute/surfacenets && cargo fetch",
+    "preinstall": "cd src/libs/compute && cargo fetch",
     "dev:vite": "vite",
-    "dev:wasm": "cd src/compute/surfacenets && wasm-pack build --target web",
+    "dev:wasm": "cd src/libs/compute && wasm-pack build --target web",
     "dev": "yarn dev:wasm && yarn dev:vite",
-    "build:wasm": "cd src/compute/surfacenets && wasm-pack build --target web --release",
+    "build:wasm": "cd src/libs/compute && wasm-pack build --target web --release",
     "build": "yarn build:wasm && vue-tsc -b && vite build",
     "preview": "vite preview"
   },

@@ -2,7 +2,7 @@
 
 declare const __DEV__: boolean;
 
-import { surfaceNets } from "../../compute/surfacenets/src/surfacenets.js";
+import { surfaceNets } from "../../libs/compute/src/surfacenets/surfacenets.js";
 
 type SurfaceNetsWasmResult = {
   positions: Float32Array;
@@ -42,11 +42,9 @@ const ctx = self as unknown as DedicatedWorkerGlobalScope;
 
 // 预加载 WASM 模块，只初始化一次
 const wasmInitPromise = (async () => {
-  const wasmInit =
-    await import("../../compute/surfacenets/pkg/wasm_surfacenets.js");
-  // @ts-ignore
+  const wasmInit = await import("../../libs/compute/pkg/wasm_surfacenets.js");
   const wasmUrl =
-    await import("../../compute/surfacenets/pkg/wasm_surfacenets_bg.wasm?url");
+    await import("../../libs/compute/pkg/wasm_surfacenets_bg.wasm?url");
   await wasmInit.default(wasmUrl.default);
   return wasmInit;
 })();
